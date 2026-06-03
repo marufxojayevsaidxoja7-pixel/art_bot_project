@@ -8,8 +8,8 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()
 
-API_TOKEN = os.getenv("8883984125:AAEXtpH54kyk0Ztu6bsSylCozwbFuwwbm8w")
-ADMIN_ID = int(os.getenv("8584102298", "0"))
+API_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID =int(os.getenv("ADMIN_ID", "0"))
 
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN muhit o'zgaruvchisi o'rnatilmagan!")
