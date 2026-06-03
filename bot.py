@@ -1,12 +1,15 @@
 import asyncio
+import logging
 import os
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-# ✅ TO'G'RI: Tokenlar muhit o'zgaruvchisidan olinadi
-API_TOKEN = os.getenv("8883984125:AAExjmSNL5qxUiK7rUtgOS0uVVOsbT0ran4")
-ADMIN_ID = int(os.getenv("8584102298", "0"))
+load_dotenv()
+
+API_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN muhit o'zgaruvchisi o'rnatilmagan!")
@@ -78,7 +81,6 @@ async def admin_panel(message: Message):
 
 @dp.callback_query(F.data.in_(["start_c", "stop_c", "stats", "winner", "clear"]))
 async def callback_admin(callback: types.CallbackQuery):
-    # ✅ Admin tekshiruvi
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Faqat admin uchun!", show_alert=True)
         return
@@ -113,7 +115,6 @@ async def callback_admin(callback: types.CallbackQuery):
         if not participants:
             await callback.answer("Hali ishtirokchi yo'q!", show_alert=True)
             return
-        # Eng ko'p rasm yuborgan g'olib
         winner_id = max(participants, key=lambda uid: participants[uid]["count"])
         winner = participants[winner_id]
         await callback.message.edit_text(
@@ -121,8 +122,6 @@ async def callback_admin(callback: types.CallbackQuery):
             f"📸 Yuborilgan rasmlar: {winner['count']} ta",
             reply_markup=admin_keyboard()
         )
-        # Kanalga e'lon (agar kanal ID qo'shilsa)
-        # await bot.send_message(CHANNEL_ID, f"🏆 Konkurs g'olibi: {winner['name']}!")
 
     elif callback.data == "clear":
         participants.clear()
@@ -169,7 +168,6 @@ async def handle_photo(message: Message):
     user_id = message.from_user.id
     user_name = message.from_user.full_name
 
-    # Ishtirokchini ro'yxatga olish
     if user_id not in participants:
         participants[user_id] = {"name": user_name, "photo_id": message.photo[-1].file_id, "count": 0}
     participants[user_id]["count"] += 1
@@ -180,7 +178,6 @@ async def handle_photo(message: Message):
         f"📸 Siz {participants[user_id]['count']} ta rasm yubordingiz."
     )
 
-    # Adminga yuborish
     await bot.send_photo(
         chat_id=ADMIN_ID,
         photo=message.photo[-1].file_id,
@@ -198,8 +195,15 @@ async def handle_photo(message: Message):
 # ========================
 
 async def main():
-    print("✅ Bot ishga tushdi!")
-    await dp.start_polling(bot)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.info("✅ Bot ishga tushdi!")
+
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except Exception:
+            logging.exception("Botda xato yuz berdi. 10 soniyadan keyin qayta ishga tushiriladi...")
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
     asyncio.run(main())
