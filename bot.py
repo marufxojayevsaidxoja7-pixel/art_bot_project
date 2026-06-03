@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ✅ TO'G'RI: Tokenlar muhit o'zgaruvchisidan olinadi
-API_TOKEN = os.getenv("8883984125:AAFaDXz9apNNsCz2fxAkv8dnreqto0b9HQQ")
+API_TOKEN = os.getenv("8883984125:AAExjmSNL5qxUiK7rUtgOS0uVVOsbT0ran4")
 ADMIN_ID = int(os.getenv("8584102298", "0"))
 
 if not API_TOKEN:
