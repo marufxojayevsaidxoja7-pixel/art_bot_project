@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 load_dotenv()
 
@@ -19,9 +20,40 @@ if ADMIN_IDS == [0]:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
+# Majburiy obuna kanallari/guruhlari
+REQUIRED_CHANNELS = [
+    {"name": "Chizish uchun rasmlar", "username": "@chizish_uchun_rasmlar", "url": "https://t.me/chizish_uchun_rasmlar"},
+    # Qo'shimcha kanal qo'shish uchun:
+    # {"name": "Kanal nomi", "username": "@kanal_username", "url": "https://t.me/kanal_username"},
+]
+
 # Konkurs holati va ishtirokchilar
 is_contest_active = False
-participants = {}  # {user_id: {"name": ..., "photo_id": ..., "count": ...}}
+participants = {}
+
+# ========================
+# OBUNA TEKSHIRUVI
+# ========================
+
+async def check_subscription(user_id: int) -> list:
+    """Obuna bo'lmagan kanallar ro'yxatini qaytaradi"""
+    not_subscribed = []
+    for channel in REQUIRED_CHANNELS:
+        try:
+            member = await bot.get_chat_member(channel["username"], user_id)
+            if member.status in ["left", "kicked", "banned"]:
+                not_subscribed.append(channel)
+        except Exception:
+            not_subscribed.append(channel)
+    return not_subscribed
+
+def subscribe_keyboard(channels: list):
+    """Obuna bo'lish tugmalari"""
+    buttons = []
+    for ch in channels:
+        buttons.append([InlineKeyboardButton(text=f"📢 {ch['name']}", url=ch["url"])])
+    buttons.append([InlineKeyboardButton(text="✅ Obuna bo'ldim!", callback_data="check_sub")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # ========================
 # KLAVIATURALAR
@@ -48,6 +80,15 @@ def photo_action_keyboard(user_id: int):
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
+    not_subscribed = await check_subscription(message.from_user.id)
+    if not_subscribed:
+        await message.answer(
+            "👋 Xush kelibsiz!\n\n"
+            "⚠️ Botdan foydalanish uchun quyidagi kanal(lar)ga obuna bo'ling:",
+            reply_markup=subscribe_keyboard(not_subscribed)
+        )
+        return
+
     status = "🟢 Hozir konkurs ochiq!" if is_contest_active else "🔴 Hozir konkurs yo'q."
     await message.answer(
         f"🎨 Rasm chizish konkursi botiga xush kelibsiz!\n\n"
@@ -60,6 +101,25 @@ async def cmd_status(message: Message):
     status = "🟢 Konkurs ochiq" if is_contest_active else "🔴 Konkurs yopiq"
     count = len(participants)
     await message.answer(f"{status}\n👥 Ishtirokchilar: {count} nafar")
+
+# Obuna tekshiruv tugmasi
+@dp.callback_query(F.data == "check_sub")
+async def check_sub_callback(callback: types.CallbackQuery):
+    not_subscribed = await check_subscription(callback.from_user.id)
+    if not_subscribed:
+        await callback.answer("❌ Hali obuna bo'lmagansiz!", show_alert=True)
+        await callback.message.edit_text(
+            "⚠️ Quyidagi kanal(lar)ga obuna bo'ling:",
+            reply_markup=subscribe_keyboard(not_subscribed)
+        )
+    else:
+        await callback.answer("✅ Rahmat!", show_alert=False)
+        status = "🟢 Hozir konkurs ochiq!" if is_contest_active else "🔴 Hozir konkurs yo'q."
+        await callback.message.edit_text(
+            f"🎨 Rasm chizish konkursi botiga xush kelibsiz!\n\n"
+            f"{status}\n\n"
+            f"Konkursga ishtirok etish uchun rasmingizni yuboring."
+        )
 
 # ========================
 # ADMIN PANEL
@@ -81,61 +141,49 @@ async def admin_panel(message: Message):
         reply_markup=admin_keyboard()
     )
 
-# Admin qo'shish
 @dp.message(Command("addadmin"))
 async def add_admin(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Siz admin emassiz!")
         return
-
     args = message.text.split()
     if len(args) < 2:
         await message.answer("📝 Ishlatish: /addadmin 123456789")
         return
-
     try:
         new_admin_id = int(args[1])
     except ValueError:
         await message.answer("❌ ID raqam bo'lishi kerak!")
         return
-
     if new_admin_id in ADMIN_IDS:
         await message.answer("⚠️ Bu foydalanuvchi allaqachon admin!")
         return
-
     ADMIN_IDS.append(new_admin_id)
     await message.answer(f"✅ {new_admin_id} admin qilib qo'shildi!")
 
-# Admin o'chirish
 @dp.message(Command("removeadmin"))
 async def remove_admin(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Siz admin emassiz!")
         return
-
     args = message.text.split()
     if len(args) < 2:
         await message.answer("📝 Ishlatish: /removeadmin 123456789")
         return
-
     try:
         remove_id = int(args[1])
     except ValueError:
         await message.answer("❌ ID raqam bo'lishi kerak!")
         return
-
     if remove_id not in ADMIN_IDS:
         await message.answer("⚠️ Bu foydalanuvchi admin emas!")
         return
-
     if len(ADMIN_IDS) == 1:
         await message.answer("❌ Kamida 1 ta admin bo'lishi kerak!")
         return
-
     ADMIN_IDS.remove(remove_id)
     await message.answer(f"✅ {remove_id} adminlikdan o'chirildi!")
 
-# Adminlar ro'yxati
 @dp.message(Command("admins"))
 async def list_admins(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -158,14 +206,12 @@ async def callback_admin(callback: types.CallbackQuery):
             "✅ Konkurs boshlandi!\nIshtirokchilar rasm yuborishlarini kutamiz.",
             reply_markup=admin_keyboard()
         )
-
     elif callback.data == "stop_c":
         is_contest_active = False
         await callback.message.edit_text(
             "🛑 Konkurs to'xtatildi.",
             reply_markup=admin_keyboard()
         )
-
     elif callback.data == "stats":
         if not participants:
             text = "📊 Hali hech kim ishtirok etmagan."
@@ -175,7 +221,6 @@ async def callback_admin(callback: types.CallbackQuery):
                 lines.append(f"{i}. {data['name']} — {data['count']} ta rasm")
             text = "\n".join(lines)
         await callback.message.edit_text(text, reply_markup=admin_keyboard())
-
     elif callback.data == "winner":
         if not participants:
             await callback.answer("Hali ishtirokchi yo'q!", show_alert=True)
@@ -187,7 +232,6 @@ async def callback_admin(callback: types.CallbackQuery):
             f"📸 Yuborilgan rasmlar: {winner['count']} ta",
             reply_markup=admin_keyboard()
         )
-
     elif callback.data == "clear":
         participants.clear()
         await callback.message.edit_text(
@@ -197,7 +241,6 @@ async def callback_admin(callback: types.CallbackQuery):
 
     await callback.answer()
 
-# Admin rasm qabul/rad etish
 @dp.callback_query(F.data.startswith("accept_") | F.data.startswith("reject_"))
 async def photo_decision(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
@@ -226,6 +269,15 @@ async def photo_decision(callback: types.CallbackQuery):
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
+    # Obuna tekshiruvi
+    not_subscribed = await check_subscription(message.from_user.id)
+    if not_subscribed:
+        await message.answer(
+            "⚠️ Rasmingizni yuborishdan oldin quyidagi kanal(lar)ga obuna bo'ling:",
+            reply_markup=subscribe_keyboard(not_subscribed)
+        )
+        return
+
     if not is_contest_active:
         await message.answer("⏳ Hozir konkurs ochiq emas. Kuting!")
         return
@@ -243,7 +295,6 @@ async def handle_photo(message: Message):
         f"📸 Siz {participants[user_id]['count']} ta rasm yubordingiz."
     )
 
-    # Barcha adminlarga yuborish
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_photo(
