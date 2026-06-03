@@ -9,11 +9,11 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 load_dotenv()
 
 API_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID =int(os.getenv("ADMIN_ID", "0"))
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_ID", "0").split(",")]
 
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN muhit o'zgaruvchisi o'rnatilmagan!")
-if ADMIN_ID == 0:
+if ADMIN_IDS == [0]:
     raise ValueError("ADMIN_ID muhit o'zgaruvchisi o'rnatilmagan!")
 
 bot = Bot(token=API_TOKEN)
@@ -67,21 +67,86 @@ async def cmd_status(message: Message):
 
 @dp.message(Command("admin"))
 async def admin_panel(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Siz admin emassiz!")
         return
     count = len(participants)
     status = "🟢 Ochiq" if is_contest_active else "🔴 Yopiq"
+    admins_list = "\n".join([f"• {aid}" for aid in ADMIN_IDS])
     await message.answer(
         f"👑 Admin panel\n\n"
         f"📌 Konkurs holati: {status}\n"
-        f"👥 Ishtirokchilar: {count} nafar",
+        f"👥 Ishtirokchilar: {count} nafar\n\n"
+        f"👮 Adminlar:\n{admins_list}",
         reply_markup=admin_keyboard()
     )
 
+# Admin qo'shish
+@dp.message(Command("addadmin"))
+async def add_admin(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Siz admin emassiz!")
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("📝 Ishlatish: /addadmin 123456789")
+        return
+
+    try:
+        new_admin_id = int(args[1])
+    except ValueError:
+        await message.answer("❌ ID raqam bo'lishi kerak!")
+        return
+
+    if new_admin_id in ADMIN_IDS:
+        await message.answer("⚠️ Bu foydalanuvchi allaqachon admin!")
+        return
+
+    ADMIN_IDS.append(new_admin_id)
+    await message.answer(f"✅ {new_admin_id} admin qilib qo'shildi!")
+
+# Admin o'chirish
+@dp.message(Command("removeadmin"))
+async def remove_admin(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Siz admin emassiz!")
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("📝 Ishlatish: /removeadmin 123456789")
+        return
+
+    try:
+        remove_id = int(args[1])
+    except ValueError:
+        await message.answer("❌ ID raqam bo'lishi kerak!")
+        return
+
+    if remove_id not in ADMIN_IDS:
+        await message.answer("⚠️ Bu foydalanuvchi admin emas!")
+        return
+
+    if len(ADMIN_IDS) == 1:
+        await message.answer("❌ Kamida 1 ta admin bo'lishi kerak!")
+        return
+
+    ADMIN_IDS.remove(remove_id)
+    await message.answer(f"✅ {remove_id} adminlikdan o'chirildi!")
+
+# Adminlar ro'yxati
+@dp.message(Command("admins"))
+async def list_admins(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Siz admin emassiz!")
+        return
+    admins_list = "\n".join([f"{i+1}. {aid}" for i, aid in enumerate(ADMIN_IDS)])
+    await message.answer(f"👮 Adminlar ro'yxati:\n\n{admins_list}")
+
 @dp.callback_query(F.data.in_(["start_c", "stop_c", "stats", "winner", "clear"]))
 async def callback_admin(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("⛔ Faqat admin uchun!", show_alert=True)
         return
 
@@ -135,7 +200,7 @@ async def callback_admin(callback: types.CallbackQuery):
 # Admin rasm qabul/rad etish
 @dp.callback_query(F.data.startswith("accept_") | F.data.startswith("reject_"))
 async def photo_decision(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID:
+    if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("⛔ Faqat admin!", show_alert=True)
         return
 
@@ -178,17 +243,22 @@ async def handle_photo(message: Message):
         f"📸 Siz {participants[user_id]['count']} ta rasm yubordingiz."
     )
 
-    await bot.send_photo(
-        chat_id=ADMIN_ID,
-        photo=message.photo[-1].file_id,
-        caption=(
-            f"🖼 Yangi rasm!\n"
-            f"👤 Muallif: {user_name}\n"
-            f"🆔 ID: {user_id}\n"
-            f"📸 Jami: {participants[user_id]['count']} ta rasm"
-        ),
-        reply_markup=photo_action_keyboard(user_id)
-    )
+    # Barcha adminlarga yuborish
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=message.photo[-1].file_id,
+                caption=(
+                    f"🖼 Yangi rasm!\n"
+                    f"👤 Muallif: {user_name}\n"
+                    f"🆔 ID: {user_id}\n"
+                    f"📸 Jami: {participants[user_id]['count']} ta rasm"
+                ),
+                reply_markup=photo_action_keyboard(user_id)
+            )
+        except Exception:
+            pass
 
 # ========================
 # ISHGA TUSHIRISH
