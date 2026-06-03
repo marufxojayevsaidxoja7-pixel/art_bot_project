@@ -8,7 +8,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()
 
-API_TOKEN = os.getenv("8883984125:AAExjmSNL5qxUiK7rUtgOS0uVVOsbT0ran4")
+API_TOKEN = os.getenv("8883984125:AAEXtpH54kyk0Ztu6bsSylCozwbFuwwbm8w")
 ADMIN_ID = int(os.getenv("8584102298", "0"))
 
 if not API_TOKEN:
